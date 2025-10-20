@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每周一好评 - 网页版</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(135deg, #faf8f5 0%, #f0e6d2 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container {
+            max-width: 1200px; margin: 0 auto; background: white;
+            border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden; display: flex; flex-direction: column;
+            min-height: calc(100vh - 40px);
+        }
+        .header {
+            background: linear-gradient(135deg, #D2B48C 0%, #DEB887 100%);
+            color: white; padding: 30px; text-align: center;
+        }
+        .header h1 { font-size: 32px; font-weight: 600; margin-bottom: 10px; }
+        .main-content { flex: 1; padding: 40px; }
+        .upload-section {
+            background: #f8f9fa; border-radius: 12px; padding: 30px;
+            margin-bottom: 30px; border: 2px dashed #cbd5e0;
+            transition: all 0.3s;
+        }
+        .upload-section:hover { border-color: #D2B48C; background: #f7fafc; }
+        .folder-upload {
+            text-align: center; margin-bottom: 30px;
+        }
+        .folder-upload-button {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 20px 40px; background: #D2B48C; color: white;
+            border: none; border-radius: 8px; cursor: pointer;
+            transition: all 0.3s; font-size: 18px; font-weight: 500;
+        }
+        .folder-upload-button:hover { background: #DEB887; transform: translateY(-2px); }
+        .file-mapping {
+            display: none; margin-top: 20px;
+        }
+        .file-mapping h3 { color: #2d3748; margin-bottom: 15px; }
+        .file-mapping-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;
+        }
+        .mapping-item {
+            background: #f8f9fa; padding: 15px; border-radius: 8px;
+            border: 1px solid #e2e8f0; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .mapping-item.found { border-color: #48bb78; }
+        .mapping-item.missing { border-color: #f56565; }
+        .mapping-info { flex: 1; }
+        .mapping-title { font-weight: 600; color: #2d3748; margin-bottom: 5px; }
+        .mapping-filename { font-size: 12px; color: #666; }
+        .mapping-status {
+            padding: 4px 8px; border-radius: 4px; font-size: 12px;
+            font-weight: 500;
+        }
+        .mapping-status.found { background: #48bb78; color: white; }
+        .mapping-status.missing { background: #f56565; color: white; }
+        .date-input-section {
+            background: #f8f9fa; border-radius: 12px; padding: 30px;
+            margin-bottom: 30px; border: 2px solid #e2e8f0;
+        }
+        .date-input-grid {
+            display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 20px; margin-bottom: 20px;
+        }
+        .date-input-item { display: flex; flex-direction: column; }
+        .date-input-item label { font-weight: 500; color: #4a5568; margin-bottom: 8px; }
+        .date-input { 
+            padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px;
+            font-size: 14px; transition: border-color 0.3s;
+        }
+        .date-input:focus { outline: none; border-color: #D2B48C; }
+        .process-section { text-align: center; margin: 40px 0; }
+        .btn {
+            padding: 15px 30px; border: none; border-radius: 8px;
+            font-size: 16px; font-weight: 500; cursor: pointer;
+            transition: all 0.3s; display: inline-flex; align-items: center;
+            gap: 10px; margin: 0 10px;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .btn-primary { background: #D2B48C; color: white; }
+        .btn-success { background: #48bb78; color: white; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .progress-section { margin: 30px 0; display: none; }
+        .progress-bar {
+            width: 100%; height: 20px; background: #e2e8f0;
+            border-radius: 10px; overflow: hidden; margin-bottom: 10px;
+        }
+        .progress-fill {
+            height: 100%; background: linear-gradient(90deg, #D2B48C, #DEB887);
+            width: 0%; transition: width 0.3s;
+        }
+        .progress-text { text-align: center; color: #666; font-size: 14px; }
+        .results-section { margin-top: 30px; display: none; }
+        .results-section h3 { color: #2d3748; margin-bottom: 20px; }
+        .download-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
+        .download-item {
+            background: #f8f9fa; padding: 15px; border-radius: 8px;
+            border: 1px solid #e2e8f0; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .download-btn {
+            padding: 8px 16px; background: #48bb78; color: white;
+            border: none; border-radius: 6px; cursor: pointer;
+            font-size: 12px; transition: background 0.3s;
+        }
+        .download-btn:hover { background: #38a169; }
+        .log-section { margin-top: 30px; display: none; }
+        .log-container {
+            background: #1a202c; color: #e2e8f0; padding: 20px;
+            border-radius: 8px; font-family: 'Courier New', monospace;
+            font-size: 13px; line-height: 1.5; max-height: 300px; overflow-y: auto;
+        }
+        .log-entry { margin-bottom: 5px; }
+        .log-entry.success { color: #48bb78; }
+        .log-entry.error { color: #f56565; }
+        .log-entry.info { color: #4299e1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 每周一好评</h1>
+        </div>
+        <div class="main-content">
+            <!-- 日期输入区域 -->
+            <div class="date-input-section">
+                <h2>📅 日期信息</h2>
+                <div class="date-input-grid">
+                    <div class="date-input-item">
+                        <label>年份</label>
+                        <input type="text" class="date-input" id="yearInput" value="2024" placeholder="如：2024">
+                    </div>
+                    <div class="date-input-item"></div>
+                    <div class="date-input-item"></div>
+                    <div class="date-input-item"></div>
+                </div>
+                <div class="date-input-grid">
+                    <div class="date-input-item">
+                        <label>起始月</label>
+                        <input type="text" class="date-input" id="startMonthInput" value="4" placeholder="如：4">
+                    </div>
+                    <div class="date-input-item">
+                        <label>起始日</label>
+                        <input type="text" class="date-input" id="startDayInput" value="21" placeholder="如：21">
+                    </div>
+                    <div class="date-input-item">
+                        <label>结束月</label>
+                        <input type="text" class="date-input" id="endMonthInput" value="4" placeholder="如：4">
+                    </div>
+                    <div class="date-input-item">
+                        <label>结束日</label>
+                        <input type="text" class="date-input" id="endDayInput" value="27" placeholder="如：27">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文件夹上传区域 -->
+            <div class="upload-section">
+                <h2>📁 文件夹上传</h2>
+                <div class="folder-upload">
+                    <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;" accept=".xlsx,.jpg,.jpeg">
+                    <button class="folder-upload-button" onclick="document.getElementById('folderInput').click()">
+                        📂 选择文件夹
+                    </button>
+                    <div style="margin-top: 15px; color: #666; font-size: 14px;">
+                        请确保文件夹中的文件以数字1-5开头命名（如：1抖音图片.jpg, 2抖音数据.xlsx等）
+                    </div>
+                </div>
+                
+                <div id="fileMapping" class="file-mapping">
+                    <h3>📋 文件识别结果</h3>
+                    <div class="file-mapping-grid">
+                        <div class="mapping-item" id="mapping-1">
+                            <div class="mapping-info">
+                                <div class="mapping-title">1️⃣ 抖音好评图片</div>
+                                <div class="mapping-filename" id="file-1-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-1-status">缺失</div>
+                        </div>
+                        <div class="mapping-item" id="mapping-2">
+                            <div class="mapping-info">
+                                <div class="mapping-title">2️⃣ 抖音好评Excel</div>
+                                <div class="mapping-filename" id="file-2-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-2-status">缺失</div>
+                        </div>
+                        <div class="mapping-item" id="mapping-3">
+                            <div class="mapping-info">
+                                <div class="mapping-title">3️⃣ 美团好评图片</div>
+                                <div class="mapping-filename" id="file-3-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-3-status">缺失</div>
+                        </div>
+                        <div class="mapping-item" id="mapping-4">
+                            <div class="mapping-info">
+                                <div class="mapping-title">4️⃣ 美团好评Excel</div>
+                                <div class="mapping-filename" id="file-4-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-4-status">缺失</div>
+                        </div>
+                        <div class="mapping-item" id="mapping-5">
+                            <div class="mapping-info">
+                                <div class="mapping-title">5️⃣ 团购门店名对应表</div>
+                                <div class="mapping-filename" id="file-5-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-5-status">缺失</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="process-section">
+                <button class="btn btn-primary" onclick="processData()" id="processBtn">🚀 开始处理</button>
+                <button class="btn btn-success" onclick="downloadAllAsZip()" id="downloadAllBtn" style="display: none;">📦 打包下载全部</button>
+            </div>
+
+            <div class="progress-section" id="progressSection">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">准备开始处理...</div>
+            </div>
+
+            <div class="results-section" id="resultsSection">
+                <h3>📋 处理结果</h3>
+                <div class="download-list" id="downloadList"></div>
+            </div>
+
+            <div class="log-section" id="logSection">
+                <h3>📝 处理日志</h3>
+                <div class="log-container" id="logContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let uploadedFiles = {};
+        let processedFiles = {};
+        let fileMapping = {
+            '1': 'douyinImage',
+            '2': 'douyinExcel', 
+            '3': 'meituanImage',
+            '4': 'meituanExcel',
+            '5': 'mappingFile'
+        };
+        let fileNames = {
+            '1': '抖音好评图片',
+            '2': '抖音好评Excel',
+            '3': '美团好评图片', 
+            '4': '美团好评Excel',
+            '5': '团购门店名对应表'
+        };
+
+        // 文件夹上传监听器
+        document.getElementById('folderInput').addEventListener('change', function(e) {
+            const files = Array.from(e.target.files);
+            log(`📂 选择了文件夹，包含 ${files.length} 个文件`, 'info');
+            
+            // 重置文件映射显示
+            resetFileMapping();
+            
+            // 处理文件
+            files.forEach(file => {
+                const firstChar = file.name.charAt(0);
+                if (fileMapping[firstChar]) {
+                    uploadedFiles[fileMapping[firstChar]] = file;
+                    updateFileMapping(firstChar, file.name);
+                    log(`✅ 识别文件: ${file.name} → ${fileNames[firstChar]}`, 'success');
+                } else {
+                    log(`⚠️ 无法识别文件: ${file.name} (文件名不是以1-5开头)`, 'warning');
+                }
+            });
+            
+            // 显示文件映射结果
+            document.getElementById('fileMapping').style.display = 'block';
+            
+            // 检查是否所有必需文件都已上传
+            const missingFiles = Object.keys(fileMapping).filter(num => !uploadedFiles[fileMapping[num]]);
+            if (missingFiles.length === 0) {
+                log('✅ 所有必需文件已找到，可以开始处理', 'success');
+            } else {
+                log(`⚠️ 缺少文件: ${missingFiles.map(num => fileNames[num]).join(', ')}`, 'warning');
+            }
+        });
+
+        // 重置文件映射显示
+        function resetFileMapping() {
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById(`file-${i}-name`).textContent = '未找到';
+                document.getElementById(`file-${i}-status`).textContent = '缺失';
+                document.getElementById(`file-${i}-status`).className = 'mapping-status missing';
+                document.getElementById(`mapping-${i}`).className = 'mapping-item missing';
+            }
+        }
+
+        // 更新文件映射显示
+        function updateFileMapping(number, fileName) {
+            document.getElementById(`file-${number}-name`).textContent = fileName;
+            document.getElementById(`file-${number}-status`).textContent = '已找到';
+            document.getElementById(`file-${number}-status`).className = 'mapping-status found';
+            document.getElementById(`mapping-${number}`).className = 'mapping-item found';
+        }
+
+        // 日志函数
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logSection = document.getElementById('logSection');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            logSection.style.display = 'block';
+        }
+
+        // 更新进度
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        // 显示进度条
+        function showProgress() {
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('processBtn').disabled = true;
+        }
+
+        // 隐藏进度条
+        function hideProgress() {
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('processBtn').disabled = false;
+        }
+
+        // 读取Excel文件
+        function readExcelFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        resolve(workbook);
+                    } catch (error) {
+                        log(`读取文件 ${file.name} 时出错: ${error.message}`, 'error');
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 获取工作表数据
+        function getSheetData(workbook, sheetName = null) {
+            const sheet = sheetName ? workbook.Sheets[sheetName] : workbook.Sheets[workbook.SheetNames[0]];
+            const range = XLSX.utils.decode_range(sheet['!ref']);
+            const data = [];
+            for (let row = range.s.r; row <= range.e.r; row++) {
+                const rowData = [];
+                for (let col = range.s.c; col <= range.e.c; col++) {
+                    const cellAddress = XLSX.utils.encode_cell({r: row, c: col});
+                    const cell = sheet[cellAddress];
+                    rowData.push(cell ? cell.v : '');
+                }
+                data.push(rowData);
+            }
+            return data;
+        }
+
+        // 创建图片画布
+        function createImageCanvas(imageFile) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    resolve({ canvas, ctx, width: img.width, height: img.height });
+                };
+                img.onerror = reject;
+                img.src = URL.createObjectURL(imageFile);
+            });
+        }
+
+        // 绘制文字到画布
+        function drawText(ctx, text, x, y, fontSize = 40, color = '#8B4513', fontFamily = 'Arial') {
+            ctx.font = `${fontSize}px ${fontFamily}`;
+            ctx.fillStyle = color;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(text, x, y);
+        }
+
+        // 绘制表格
+        function drawTable(ctx, storeCounts, startX, startY, fontSize = 40) {
+            const sortedStores = Object.entries(storeCounts)
+                .sort(([,a], [,b]) => b - a);
+            
+            const rankWidth = 100;
+            const storeWidth = 200;
+            const countWidth = 210;
+            const rowHeight = 91;
+            
+            let y = startY;
+            
+            // 绘制表头
+            const rankTextWidth = ctx.measureText('排名').width;
+            const countTextWidth = ctx.measureText('增长数量').width;
+            drawText(ctx, '排名', startX + (rankWidth - rankTextWidth) / 2, y, fontSize, '#8B4513');
+            drawText(ctx, '门店', 550, y, fontSize, '#8B4513');
+            drawText(ctx, '增长数量', 870 + (countWidth - countTextWidth) / 2, y, fontSize, '#8B4513');
+            y += rowHeight;
+            
+            // 绘制前7个门店
+            for (let i = 0; i < Math.min(7, sortedStores.length); i++) {
+                const [store, count] = sortedStores[i];
+                const rank = (i >= 3) ? String(i + 1) : '';
+                const countText = `${count}个`;
+                
+                const rankNumWidth = ctx.measureText(rank).width;
+                const countNumWidth = ctx.measureText(countText).width;
+                drawText(ctx, rank, startX + (rankWidth - rankNumWidth) / 2, y, fontSize, '#8B4513');
+                drawText(ctx, store, 550, y, fontSize, '#8B4513');
+                drawText(ctx, countText, 870 + (countWidth - countNumWidth) / 2, y, fontSize, '#8B4513');
+                y += rowHeight;
+            }
+            
+            // 绘制后7个门店
+            y += 210;
+            const rankTextWidth2 = ctx.measureText('排名').width;
+            const countTextWidth2 = ctx.measureText('增长数量').width;
+            drawText(ctx, '排名', startX + (rankWidth - rankTextWidth2) / 2, y, fontSize, '#000000');
+            drawText(ctx, '门店', 550, y, fontSize, '#000000');
+            drawText(ctx, '增长数量', 870 + (countWidth - countTextWidth2) / 2, y, fontSize, '#000000');
+            y += rowHeight;
+            
+            const startIndex = Math.max(0, sortedStores.length - 7);
+            for (let i = startIndex; i < sortedStores.length; i++) {
+                const [store, count] = sortedStores[i];
+                const rank = String(i + 1);
+                const countText = `${count}个`;
+                
+                const rankNumWidth2 = ctx.measureText(rank).width;
+                const countNumWidth2 = ctx.measureText(countText).width;
+                drawText(ctx, rank, startX + (rankWidth - rankNumWidth2) / 2, y, fontSize, '#000000');
+                drawText(ctx, store, 550, y, fontSize, '#000000');
+                drawText(ctx, countText, 870 + (countWidth - countNumWidth2) / 2, y, fontSize, '#000000');
+                y += rowHeight;
+            }
+        }
+
+        // 处理抖音数据
+        async function processDouyinData(year, startMonth, startDay, endMonth, endDay) {
+            log('处理抖音好评数据...', 'info');
+            
+            // 读取Excel数据
+            const douyinWorkbook = await readExcelFile(uploadedFiles['douyinExcel']);
+            const mappingWorkbook = await readExcelFile(uploadedFiles['mappingFile']);
+            
+            // 读取映射表
+            const douyinMapping = {};
+            const douyinMappingData = getSheetData(mappingWorkbook, mappingWorkbook.SheetNames[1]);
+            for (let i = 1; i < douyinMappingData.length; i++) {
+                const originalName = douyinMappingData[i][0];
+                const mappedName = douyinMappingData[i][1];
+                if (originalName && mappedName) {
+                    douyinMapping[String(originalName).trim()] = String(mappedName).trim();
+                }
+            }
+            
+            // 读取抖音数据
+            const douyinData = getSheetData(douyinWorkbook);
+            const storeCounts = {};
+            
+            for (let i = 1; i < douyinData.length; i++) {
+                const storeName = douyinData[i][0]; // 假设第一列是门店名称
+                if (storeName) {
+                    const mappedName = douyinMapping[String(storeName).trim()] || String(storeName).trim();
+                    storeCounts[mappedName] = (storeCounts[mappedName] || 0) + 1;
+                }
+            }
+            
+            log(`抖音数据统计完成，共 ${Object.keys(storeCounts).length} 个门店`, 'success');
+            
+            // 处理图片
+            const { canvas, ctx, width, height } = await createImageCanvas(uploadedFiles['douyinImage']);
+            
+            // 格式化月份为双位数
+            const formattedStartMonth = String(startMonth).padStart(2, '0');
+            const formattedEndMonth = String(endMonth).padStart(2, '0');
+            
+            // 绘制标题和日期
+            drawText(ctx, year, 80, 295, 100, '#8B4513');
+            const yearWidth = ctx.measureText(year).width;
+            drawText(ctx, formattedStartMonth, 80 + yearWidth + 140, 295, 100, '#8B4513');
+            
+            // 绘制日期数字行
+            drawText(ctx, formattedStartMonth, 300, 630, 60, '#8B4513');
+            drawText(ctx, startDay, 325 + 110, 630, 60, '#8B4513');
+            drawText(ctx, formattedEndMonth, 300 + 310, 630, 60, '#8B4513');
+            drawText(ctx, endDay, 340 + 405, 630, 60, '#8B4513');
+            
+            // 绘制表格
+            drawTable(ctx, storeCounts, 275, 900, 40);
+            
+            // 转换为Blob
+            return new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/jpeg', 0.9);
+            });
+        }
+
+        // 处理美团数据
+        async function processMeituanData(year, startMonth, startDay, endMonth, endDay) {
+            log('处理美团好评数据...', 'info');
+            
+            // 读取Excel数据
+            const meituanWorkbook = await readExcelFile(uploadedFiles['meituanExcel']);
+            const mappingWorkbook = await readExcelFile(uploadedFiles['mappingFile']);
+            
+            // 读取映射表
+            const meituanMapping = {};
+            const meituanMappingData = getSheetData(mappingWorkbook, mappingWorkbook.SheetNames[0]);
+            for (let i = 1; i < meituanMappingData.length; i++) {
+                const originalName = meituanMappingData[i][0];
+                const mappedName = meituanMappingData[i][1];
+                if (originalName && mappedName) {
+                    meituanMapping[String(originalName).trim()] = String(mappedName).trim();
+                }
+            }
+            
+            // 读取美团数据
+            const meituanData = getSheetData(meituanWorkbook);
+            const storeCounts = {};
+            
+            // 使用第C列（索引2）作为门店名称，与Python程序一致
+            for (let i = 1; i < meituanData.length; i++) {
+                const storeName = meituanData[i][2]; // 第C列（评价门店列）
+                if (storeName) {
+                    const mappedName = meituanMapping[String(storeName).trim()] || String(storeName).trim();
+                    storeCounts[mappedName] = (storeCounts[mappedName] || 0) + 1;
+                }
+            }
+            
+            log(`美团数据统计完成，共 ${Object.keys(storeCounts).length} 个门店`, 'success');
+            
+            // 处理图片
+            const { canvas, ctx, width, height } = await createImageCanvas(uploadedFiles['meituanImage']);
+            
+            // 格式化月份为双位数
+            const formattedStartMonth = String(startMonth).padStart(2, '0');
+            const formattedEndMonth = String(endMonth).padStart(2, '0');
+            
+            // 绘制标题和日期
+            drawText(ctx, year, 80, 295, 100, '#8B4513');
+            const yearWidth = ctx.measureText(year).width;
+            drawText(ctx, formattedStartMonth, 80 + yearWidth + 140, 295, 100, '#8B4513');
+            
+            // 绘制日期数字行
+            drawText(ctx, formattedStartMonth, 300, 630, 60, '#8B4513');
+            drawText(ctx, startDay, 325 + 110, 630, 60, '#8B4513');
+            drawText(ctx, formattedEndMonth, 300 + 310, 630, 60, '#8B4513');
+            drawText(ctx, endDay, 340 + 405, 630, 60, '#8B4513');
+            
+            // 绘制表格
+            drawTable(ctx, storeCounts, 275, 900, 40);
+            
+            // 转换为Blob
+            return new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/jpeg', 0.9);
+            });
+        }
+
+        // 添加下载项到结果列表
+        function addDownloadItem(filename, blob) {
+            const downloadList = document.getElementById('downloadList');
+            const item = document.createElement('div');
+            item.className = 'download-item';
+            
+            const size = (blob.size / 1024).toFixed(1) + ' KB';
+            
+            item.innerHTML = `
+                <div class="file-info">
+                    <div class="file-name">${filename}</div>
+                    <div class="file-size">大小: ${size}</div>
+                </div>
+                <button class="download-btn" onclick="downloadFile('${filename}')">下载</button>
+            `;
+            
+            downloadList.appendChild(item);
+            processedFiles[filename] = blob;
+        }
+
+        // 下载单个文件
+        function downloadFile(filename) {
+            const blob = processedFiles[filename];
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 主要处理函数
+        async function processData() {
+            // 检查必需文件
+            const requiredFiles = ['douyinImage', 'douyinExcel', 'meituanImage', 'meituanExcel', 'mappingFile'];
+            const missingFiles = requiredFiles.filter(fileId => !uploadedFiles[fileId]);
+            
+            if (missingFiles.length > 0) {
+                const missingFileNames = missingFiles.map(fileId => {
+                    for (const [num, id] of Object.entries(fileMapping)) {
+                        if (id === fileId) return fileNames[num];
+                    }
+                    return fileId;
+                });
+                alert(`请先上传所有必需的文件！\n缺少的文件：${missingFileNames.join(', ')}`);
+                return;
+            }
+            
+            // 检查日期输入
+            const year = document.getElementById('yearInput').value.trim();
+            const startMonth = document.getElementById('startMonthInput').value.trim();
+            const startDay = document.getElementById('startDayInput').value.trim();
+            const endMonth = document.getElementById('endMonthInput').value.trim();
+            const endDay = document.getElementById('endDayInput').value.trim();
+            
+            if (!year || !startMonth || !startDay || !endMonth || !endDay) {
+                alert('请填写所有日期信息！');
+                return;
+            }
+            
+            showProgress();
+            log('🚀 开始处理数据...', 'info');
+            
+            try {
+                updateProgress(20, '处理抖音数据...');
+                const douyinBlob = await processDouyinData(year, startMonth, startDay, endMonth, endDay);
+                addDownloadItem('抖音好评_标注.jpg', douyinBlob);
+                
+                updateProgress(60, '处理美团数据...');
+                const meituanBlob = await processMeituanData(year, startMonth, startDay, endMonth, endDay);
+                addDownloadItem('美团好评_标注.jpg', meituanBlob);
+                
+                updateProgress(100, '处理完成！');
+                log('✅ 所有图片已生成完成！', 'success');
+                
+                document.getElementById('resultsSection').style.display = 'block';
+                document.getElementById('downloadAllBtn').style.display = 'inline-flex';
+                hideProgress();
+                
+            } catch (error) {
+                log(`❌ 处理过程中出现错误: ${error.message}`, 'error');
+                console.error('处理错误:', error);
+                hideProgress();
+            }
+        }
+
+        // 下载全部文件为ZIP压缩包
+        async function downloadAllAsZip() {
+            if (Object.keys(processedFiles).length === 0) {
+                alert('没有可下载的文件！');
+                return;
+            }
+
+            log('📦 开始创建ZIP压缩包...', 'info');
+            
+            try {
+                const zip = new JSZip();
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                
+                for (const [filename, blob] of Object.entries(processedFiles)) {
+                    zip.file(filename, blob);
+                    log(`📁 添加文件到压缩包: ${filename}`, 'info');
+                }
+                
+                log('📦 正在生成ZIP文件...', 'info');
+                const zipBlob = await zip.generateAsync({type: 'blob'});
+                
+                const url = URL.createObjectURL(zipBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `每周一好评数统计结果_${timestamp}.zip`;
+                a.click();
+                
+                URL.revokeObjectURL(url);
+                
+                log('✅ ZIP压缩包下载完成！', 'success');
+                log(`📦 文件包含 ${Object.keys(processedFiles).length} 个图片文件`, 'info');
+                
+            } catch (error) {
+                log(`❌ 创建ZIP文件失败: ${error.message}`, 'error');
+                console.error('ZIP创建错误:', error);
+            }
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            log('📊 每周一好评已就绪', 'success');
+            log('请选择包含所需文件的文件夹', 'info');
+        });
+    </script>
+</body>
+</html>
