@@ -103,6 +103,10 @@
         .progress-text { text-align: center; color: #666; font-size: 14px; }
         .results-section { margin-top: 30px; display: none; }
         .results-section h3 { color: #2d3748; margin-bottom: 20px; }
+        .preview-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .preview-card { background: white; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+        .preview-card img { width: 100%; height: auto; display: block; background: #f8f9fa; }
+        .preview-caption { padding: 10px 12px; font-size: 13px; color: #2d3748; background: #f8f9fa; border-top: 1px solid #e2e8f0; }
         .download-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
         .download-item {
             background: #f8f9fa; padding: 15px; border-radius: 8px;
@@ -174,7 +178,7 @@
                         📂 选择文件夹
                     </button>
                     <div style="margin-top: 15px; color: #666; font-size: 14px;">
-                        请确保文件夹中的文件以数字1-5开头命名（如：1抖音图片.jpg, 2抖音数据.xlsx等）
+                        请确保文件夹中的文件以数字1-5开头命名（如：1抖音图片.jpg, 2抖音数据.xlsx等）。如果有会员表，请命名为 6会员.xlsx（会自动识别）。如果有会员图片，请命名为 7会员.png（会自动识别）。
                     </div>
                 </div>
                 
@@ -216,6 +220,20 @@
                             </div>
                             <div class="mapping-status missing" id="file-5-status">缺失</div>
                         </div>
+                        <div class="mapping-item" id="mapping-6">
+                            <div class="mapping-info">
+                                <div class="mapping-title">6️⃣ 会员表（可选）</div>
+                                <div class="mapping-filename" id="file-6-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-6-status">缺失</div>
+                        </div>
+                        <div class="mapping-item" id="mapping-7">
+                            <div class="mapping-info">
+                                <div class="mapping-title">7️⃣ 会员图片（可选）</div>
+                                <div class="mapping-filename" id="file-7-name">未找到</div>
+                            </div>
+                            <div class="mapping-status missing" id="file-7-status">缺失</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -234,6 +252,7 @@
 
             <div class="results-section" id="resultsSection">
                 <h3>📋 处理结果</h3>
+                <div class="preview-list" id="previewList"></div>
                 <div class="download-list" id="downloadList"></div>
             </div>
 
@@ -274,7 +293,15 @@
             // 处理文件
             files.forEach(file => {
                 const firstChar = file.name.charAt(0);
-                if (fileMapping[firstChar]) {
+                if (firstChar === '6' && file.name.includes('会员') && /\.xlsx$/i.test(file.name)) {
+                    uploadedFiles['memberFile'] = file;
+                    updateFileMapping('6', file.name);
+                    log(`✅ 识别文件: ${file.name} → 会员表（可选）`, 'success');
+                } else if ((firstChar === '6' || firstChar === '7') && file.name.includes('会员') && /\.(png)$/i.test(file.name)) {
+                    uploadedFiles['memberImage'] = file;
+                    updateFileMapping('7', file.name);
+                    log(`✅ 识别文件: ${file.name} → 会员图片（可选）`, 'success');
+                } else if (fileMapping[firstChar]) {
                     uploadedFiles[fileMapping[firstChar]] = file;
                     updateFileMapping(firstChar, file.name);
                     log(`✅ 识别文件: ${file.name} → ${fileNames[firstChar]}`, 'success');
@@ -287,7 +314,8 @@
             document.getElementById('fileMapping').style.display = 'block';
             
             // 检查是否所有必需文件都已上传
-            const missingFiles = Object.keys(fileMapping).filter(num => !uploadedFiles[fileMapping[num]]);
+            const requiredNums = ['1', '2', '3', '4', '5'];
+            const missingFiles = requiredNums.filter(num => !uploadedFiles[fileMapping[num]]);
             if (missingFiles.length === 0) {
                 log('✅ 所有必需文件已找到，可以开始处理', 'success');
             } else {
@@ -297,7 +325,7 @@
 
         // 重置文件映射显示
         function resetFileMapping() {
-            for (let i = 1; i <= 5; i++) {
+            for (let i = 1; i <= 7; i++) {
                 document.getElementById(`file-${i}-name`).textContent = '未找到';
                 document.getElementById(`file-${i}-status`).textContent = '缺失';
                 document.getElementById(`file-${i}-status`).className = 'mapping-status missing';
@@ -405,6 +433,107 @@
             ctx.fillText(text, x, y);
         }
 
+        function countSentences(value) {
+            if (value === null || value === undefined) return 0;
+            const raw = String(value).trim();
+            if (!raw) return 0;
+
+            // Normalize whitespace/newlines
+            let s = raw.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
+            if (!s) return 0;
+
+            // Split by common sentence terminators (Chinese + English) and newlines.
+            // We count non-empty segments as sentences.
+            const parts = s.split(/[。！？.!?\n]+/g).map(p => p.trim()).filter(Boolean);
+            return parts.length;
+        }
+
+        async function processMemberData(year, startMonth, startDay, endMonth, endDay) {
+            log('处理会员数据（D列门店名 + I列句子数）...', 'info');
+
+            const memberWorkbook = await readExcelFile(uploadedFiles['memberFile']);
+            const memberData = getSheetData(memberWorkbook);
+
+            // Excel columns: D = index 3, I = index 8
+            const storeSentenceCounts = {};
+            let rowsUsed = 0;
+
+            for (let i = 1; i < memberData.length; i++) {
+                const row = memberData[i] || [];
+                const storeName = row[3];
+                const iValue = row[8];
+                if (!storeName) continue;
+                const store = String(storeName).trim();
+                if (!store) continue;
+
+                const sentences = countSentences(iValue);
+                storeSentenceCounts[store] = (storeSentenceCounts[store] || 0) + sentences;
+                rowsUsed += 1;
+            }
+
+            log(`会员数据统计完成：${Object.keys(storeSentenceCounts).length} 个门店，使用 ${rowsUsed} 行`, 'success');
+
+            if (!uploadedFiles['memberImage']) {
+                log('未提供会员图片（6会员.png 或 7会员.png），跳过图片标注', 'warning');
+                return null;
+            }
+
+            const { canvas, ctx } = await createImageCanvas(uploadedFiles['memberImage']);
+
+            // 绘制年份和日期，位置与抖音/美团保持一致
+            const formattedStartMonth = String(startMonth).padStart(2, '0');
+            const formattedEndMonth = String(endMonth).padStart(2, '0');
+
+            // 年份与起始月（大号标题行）
+            drawText(ctx, year, 80, 295, 100, '#8B4513');
+            const yearWidth = ctx.measureText(year).width;
+            drawText(ctx, formattedStartMonth, 80 + yearWidth + 140, 295, 100, '#8B4513');
+
+            // 日期数字行（起止日期）
+            drawText(ctx, formattedStartMonth, 300, 630, 60, '#8B4513');
+            drawText(ctx, startDay, 325 + 110, 630, 60, '#8B4513');
+            drawText(ctx, formattedEndMonth, 300 + 310, 630, 60, '#8B4513');
+            drawText(ctx, endDay, 340 + 405, 630, 60, '#8B4513');
+
+            // Draw header at the same place as Douyin/Meituan
+            const headerStartX = 275;
+            const headerY = 900;
+            const fontSize = 40;
+            const rankWidth = 100;
+            const countWidth = 210;
+            const rowHeight = 91;
+
+            ctx.font = `${fontSize}px Arial`;
+            const rankTextWidth = ctx.measureText('排名').width;
+            const countTextWidth = ctx.measureText('增长数量').width;
+            drawText(ctx, '排名', headerStartX + (rankWidth - rankTextWidth) / 2, headerY, fontSize, '#8B4513');
+            drawText(ctx, '门店', 550, headerY, fontSize, '#8B4513');
+            drawText(ctx, '增长数量', 870 + (countWidth - countTextWidth) / 2, headerY, fontSize, '#8B4513');
+
+            // Render top stores aligned under the header（TOP18，只显示大于 0 的门店）
+            const sorted = Object.entries(storeSentenceCounts)
+                .filter(([, totalSentences]) => totalSentences > 0)
+                .sort(([, a], [, b]) => b - a);
+            let y = headerY + rowHeight;
+            const maxItems = Math.min(18, sorted.length);
+            for (let i = 0; i < maxItems; i++) {
+                const [store, totalSentences] = sorted[i];
+                const rank = (i >= 3) ? String(i + 1) : '';
+                const countText = `${totalSentences}个`;
+
+                const rankNumWidth = ctx.measureText(rank).width;
+                const countNumWidth = ctx.measureText(countText).width;
+                drawText(ctx, rank, headerStartX + (rankWidth - rankNumWidth) / 2, y, fontSize, '#8B4513');
+                drawText(ctx, store, 505, y, fontSize, '#8B4513');
+                drawText(ctx, countText, 825 + (countWidth - countNumWidth) / 2, y, fontSize, '#8B4513');
+                y += rowHeight;
+            }
+
+            return new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/png');
+            });
+        }
+
         // 绘制表格
         function drawTable(ctx, storeCounts, startX, startY, fontSize = 40) {
             const sortedStores = Object.entries(storeCounts)
@@ -421,8 +550,8 @@
             const rankTextWidth = ctx.measureText('排名').width;
             const countTextWidth = ctx.measureText('增长数量').width;
             drawText(ctx, '排名', startX + (rankWidth - rankTextWidth) / 2, y, fontSize, '#8B4513');
-            drawText(ctx, '门店', 550, y, fontSize, '#8B4513');
-            drawText(ctx, '增长数量', 870 + (countWidth - countTextWidth) / 2, y, fontSize, '#8B4513');
+            drawText(ctx, '门店', 505, y, fontSize, '#8B4513');
+            drawText(ctx, '增长数量', 825 + (countWidth - countTextWidth) / 2, y, fontSize, '#8B4513');
             y += rowHeight;
             
             // 绘制前7个门店
@@ -434,8 +563,8 @@
                 const rankNumWidth = ctx.measureText(rank).width;
                 const countNumWidth = ctx.measureText(countText).width;
                 drawText(ctx, rank, startX + (rankWidth - rankNumWidth) / 2, y, fontSize, '#8B4513');
-                drawText(ctx, store, 550, y, fontSize, '#8B4513');
-                drawText(ctx, countText, 870 + (countWidth - countNumWidth) / 2, y, fontSize, '#8B4513');
+                drawText(ctx, store, 505, y, fontSize, '#8B4513');
+                drawText(ctx, countText, 825 + (countWidth - countNumWidth) / 2, y, fontSize, '#8B4513');
                 y += rowHeight;
             }
             
@@ -444,8 +573,8 @@
             const rankTextWidth2 = ctx.measureText('排名').width;
             const countTextWidth2 = ctx.measureText('增长数量').width;
             drawText(ctx, '排名', startX + (rankWidth - rankTextWidth2) / 2, y, fontSize, '#000000');
-            drawText(ctx, '门店', 550, y, fontSize, '#000000');
-            drawText(ctx, '增长数量', 870 + (countWidth - countTextWidth2) / 2, y, fontSize, '#000000');
+            drawText(ctx, '门店', 505, y, fontSize, '#000000');
+            drawText(ctx, '增长数量', 825 + (countWidth - countTextWidth2) / 2, y, fontSize, '#000000');
             y += rowHeight;
             
             const startIndex = Math.max(0, sortedStores.length - 7);
@@ -457,8 +586,8 @@
                 const rankNumWidth2 = ctx.measureText(rank).width;
                 const countNumWidth2 = ctx.measureText(countText).width;
                 drawText(ctx, rank, startX + (rankWidth - rankNumWidth2) / 2, y, fontSize, '#000000');
-                drawText(ctx, store, 550, y, fontSize, '#000000');
-                drawText(ctx, countText, 870 + (countWidth - countNumWidth2) / 2, y, fontSize, '#000000');
+                drawText(ctx, store, 505, y, fontSize, '#000000');
+                drawText(ctx, countText, 825 + (countWidth - countNumWidth2) / 2, y, fontSize, '#000000');
                 y += rowHeight;
             }
         }
@@ -497,7 +626,7 @@
             log(`抖音数据统计完成，共 ${Object.keys(storeCounts).length} 个门店`, 'success');
             
             // 处理图片
-            const { canvas, ctx, width, height } = await createImageCanvas(uploadedFiles['douyinImage']);
+            const { canvas, ctx } = await createImageCanvas(uploadedFiles['douyinImage']);
             
             // 格式化月份为双位数
             const formattedStartMonth = String(startMonth).padStart(2, '0');
@@ -558,7 +687,7 @@
             log(`美团数据统计完成，共 ${Object.keys(storeCounts).length} 个门店`, 'success');
             
             // 处理图片
-            const { canvas, ctx, width, height } = await createImageCanvas(uploadedFiles['meituanImage']);
+            const { canvas, ctx } = await createImageCanvas(uploadedFiles['meituanImage']);
             
             // 格式化月份为双位数
             const formattedStartMonth = String(startMonth).padStart(2, '0');
@@ -602,6 +731,25 @@
             
             downloadList.appendChild(item);
             processedFiles[filename] = blob;
+
+            // Preview
+            const previewList = document.getElementById('previewList');
+            if (previewList) {
+                const url = URL.createObjectURL(blob);
+                const card = document.createElement('div');
+                card.className = 'preview-card';
+                card.innerHTML = `
+                    <img src="${url}" alt="${filename}">
+                    <div class="preview-caption">${filename}</div>
+                `;
+                previewList.appendChild(card);
+
+                const img = card.querySelector('img');
+                if (img) {
+                    img.onload = () => URL.revokeObjectURL(url);
+                    img.onerror = () => URL.revokeObjectURL(url);
+                }
+            }
         }
 
         // 下载单个文件
@@ -646,6 +794,10 @@
             
             showProgress();
             log('🚀 开始处理数据...', 'info');
+            // Clear previous results/previews
+            document.getElementById('downloadList').innerHTML = '';
+            const previewList = document.getElementById('previewList');
+            if (previewList) previewList.innerHTML = '';
             
             try {
                 updateProgress(20, '处理抖音数据...');
@@ -655,6 +807,15 @@
                 updateProgress(60, '处理美团数据...');
                 const meituanBlob = await processMeituanData(year, startMonth, startDay, endMonth, endDay);
                 addDownloadItem('美团好评_标注.jpg', meituanBlob);
+
+                // Optional: member stats
+                if (uploadedFiles['memberFile']) {
+                    updateProgress(80, '处理会员数据...');
+                    const memberBlob = await processMemberData(year, startMonth, startDay, endMonth, endDay);
+                    if (memberBlob) {
+                        addDownloadItem('会员统计_标注.png', memberBlob);
+                    }
+                }
                 
                 updateProgress(100, '处理完成！');
                 log('✅ 所有图片已生成完成！', 'success');
@@ -716,3 +877,4 @@
     </script>
 </body>
 </html>
+
