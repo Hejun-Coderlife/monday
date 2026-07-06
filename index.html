@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>每周一好评 - 网页版</title>
+    <title>Monday Reviews</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -35,15 +35,14 @@
             font-family:"Inter",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
             color:var(--ink-soft);
             background:
-                radial-gradient(120% 70% at 50% 118%, rgba(232,129,79,0.10), transparent 60%),
-                radial-gradient(80% 60% at 50% -10%, rgba(111,183,255,0.06), transparent 60%),
-                linear-gradient(180deg,#0a0d16 0%,#06070d 50%,#05060a 100%);
+                radial-gradient(120% 80% at 50% 118%, rgba(255,200,120,0.20), transparent 55%),
+                radial-gradient(100% 90% at 50% 90%, #141826 0%, #0a0c15 45%, #05060a 100%);
             background-attachment:fixed;
             min-height:100vh; overflow-x:hidden; -webkit-font-smoothing:antialiased;
         }
         #bgfx { position:fixed; inset:0; z-index:0; width:100vw; height:100vh; display:block; pointer-events:none; }
 
-        .app { position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:52px 22px 80px; }
+        .app { position:relative; z-index:1; max-width:min(1860px,96vw); margin:0 auto; padding:48px clamp(18px,3vw,44px) 76px; }
 
         .hero { text-align:center; margin-bottom:32px; animation:rise .7s cubic-bezier(.2,.7,.2,1) both; }
         .hero-eyebrow {
@@ -222,7 +221,7 @@
     <div class="app">
         <header class="hero">
             <div class="hero-eyebrow">Store Analytics</div>
-            <h1>每周一<em>好评</em></h1>
+            <h1>Monday <em>Reviews</em></h1>
             <p>上传门店数据，生成抖音与美团好评统计图</p>
         </header>
 
@@ -1397,43 +1396,152 @@
     </script>
 
     <script type="module">
-    import * as THREE from 'three';
-    const cv=document.getElementById('bgfx');
-    if(cv){ try{
-      const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});
-      r.setPixelRatio(Math.min(devicePixelRatio,2)); r.setClearColor(0x000000,0);
-      const sc=new THREE.Scene(); let asp=innerWidth/innerHeight;
-      const cam=new THREE.OrthographicCamera(-asp,asp,1,-1,0.1,10); cam.position.z=2;
-      const N=360, pos=new Float32Array(N*3), col=new Float32Array(N*3), sz=new Float32Array(N), sd=new Float32Array(N), sp=new Float32Array(N);
-      const pal=[new THREE.Color('#ffd98a'),new THREE.Color('#f0a35a'),new THREE.Color('#6fb7ff'),new THREE.Color('#c85a86')];
-      const rnd=(a,b)=>a+Math.random()*(b-a);
-      for(let i=0;i<N;i++){ pos[i*3]=rnd(-asp,asp); pos[i*3+1]=rnd(-1.1,1.2); pos[i*3+2]=0;
-        const c=pal[(Math.random()*pal.length)|0]; col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
-        sz[i]=rnd(1,3); sd[i]=rnd(0,99); sp[i]=rnd(0.006,0.03); }
-      const g=new THREE.BufferGeometry();
-      g.setAttribute('position',new THREE.BufferAttribute(pos,3));
-      g.setAttribute('color',new THREE.BufferAttribute(col,3));
-      g.setAttribute('psize',new THREE.BufferAttribute(sz,1));
-      const S=64,tc=document.createElement('canvas'); tc.width=tc.height=S; const tg=tc.getContext('2d');
-      const gr=tg.createRadialGradient(S/2,S/2,0,S/2,S/2,S/2);
-      gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(.35,'rgba(255,255,255,.5)'); gr.addColorStop(1,'rgba(255,255,255,0)');
-      tg.fillStyle=gr; tg.fillRect(0,0,S,S); const tex=new THREE.CanvasTexture(tc);
-      const m=new THREE.ShaderMaterial({uniforms:{uTex:{value:tex},uScale:{value:innerHeight/2}},
-        vertexColors:true, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
-        vertexShader:'attribute float psize; varying vec3 vC; uniform float uScale; void main(){ vC=color; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_PointSize=psize*0.011*uScale; }',
-        fragmentShader:'uniform sampler2D uTex; varying vec3 vC; void main(){ float a=texture2D(uTex,gl_PointCoord).a; gl_FragColor=vec4(vC,a*0.85); }'});
-      const pts=new THREE.Points(g,m); sc.add(pts);
-      const t0=performance.now();
-      function loop(now){ const t=(now-t0)*0.001;
-        for(let i=0;i<N;i++){ pos[i*3+1]+=sp[i]*0.016; if(pos[i*3+1]>1.25){ pos[i*3+1]=-1.25; pos[i*3]=rnd(-asp,asp); }
-          pos[i*3]+=Math.sin(t*0.4+sd[i])*0.0005; }
-        g.attributes.position.needsUpdate=true; r.render(sc,cam); requestAnimationFrame(loop); }
-      requestAnimationFrame(loop);
-      addEventListener('resize',()=>{ asp=innerWidth/innerHeight; cam.left=-asp; cam.right=asp; cam.updateProjectionMatrix();
-        r.setSize(innerWidth,innerHeight); m.uniforms.uScale.value=innerHeight/2; });
-      r.setSize(innerWidth,innerHeight);
-    }catch(e){ console.warn('bgfx off', e); } }
-    </script>
+import * as THREE from 'three';
+
+const canvas=document.getElementById('bgfx');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setClearColor(0x000000,0);
+
+const scene=new THREE.Scene();
+let aspect=innerWidth/innerHeight;
+const cam=new THREE.OrthographicCamera(-aspect,aspect,1,-1,0.1,10);
+cam.position.z=2;
+
+function rnd(a,b){return a+Math.random()*(b-a);}
+const warm=new THREE.Color('#ffdf9a'), cool=new THREE.Color('#a6e4ff'), spice=new THREE.Color('#ffb27a');
+
+const baseX=[], baseY=[], sway=[], seed=[], cols=[], sizes=[];
+function addPoint(x,y,s,c,sz){ baseX.push(x); baseY.push(y); sway.push(s); seed.push(rnd(0,99));
+  cols.push(c.r,c.g,c.b); sizes.push(sz); }
+
+const ground=-1.02;
+const nPlants=Math.round(aspect*22)+16;
+for(let i=0;i<nPlants;i++){
+  const bx=rnd(-aspect-0.1, aspect+0.1);
+  const type=Math.random();
+  const flex=rnd(0.6,1.5);
+  const depth=rnd(0.45,1);
+  const c=(Math.random()<0.5?warm:(Math.random()<0.5?cool:spice)).clone().offsetHSL(0,0,rnd(-0.05,0.05));
+  const h=rnd(0.5,1.25)*depth+0.25;
+  const curve=rnd(-0.12,0.12);
+  if(type<0.42){
+    const segs=Math.round(26*depth)+10;
+    for(let k=0;k<segs;k++){ const f=k/segs; const y=ground+f*h;
+      addPoint(bx+curve*f*f, y, f*0.16*flex, c, (1.1+0.6*(1-f))*depth); }
+    const tx=bx+curve, ty=ground+h;
+    const tuft=Math.round(70*depth)+26;
+    for(let k=0;k<tuft;k++){ const a=rnd(0,Math.PI*2), rr=Math.sqrt(Math.random())*0.075*depth+0.01;
+      addPoint(tx+Math.cos(a)*rr, ty+Math.sin(a)*rr, 0.17*flex, c, rnd(0.7,1.5)*depth); }
+  } else if(type<0.72){
+    const blades=3+Math.round(Math.random()*3);
+    for(let b=0;b<blades;b++){ const bx2=bx+rnd(-0.05,0.05), cv=curve+rnd(-0.08,0.08), hh=h*rnd(0.6,1);
+      const segs=Math.round(24*depth)+8;
+      for(let k=0;k<segs;k++){ const f=k/segs;
+        addPoint(bx2+cv*f*f, ground+f*hh, f*0.18*flex, c, (0.9+0.5*(1-f))*depth); } }
+  } else {
+    const segs=Math.round(24*depth)+8;
+    for(let k=0;k<segs;k++){ const f=k/segs;
+      addPoint(bx+curve*f*f, ground+f*h, f*0.15*flex, c, (0.9+0.4*(1-f))*depth); }
+    const tx=bx+curve, ty=ground+h;
+    for(let k=0;k<Math.round(10*depth)+5;k++){
+      addPoint(tx+rnd(-0.03,0.03), ty+rnd(-0.02,0.05), 0.15*flex, c, rnd(1.4,2.6)*depth); }
+  }
+}
+const N=baseX.length;
+const positions=new Float32Array(N*3), colors=new Float32Array(cols);
+const sizeArr=new Float32Array(sizes);
+for(let i=0;i<N;i++){ positions[i*3]=baseX[i]; positions[i*3+1]=baseY[i]; positions[i*3+2]=0; }
+
+const geo=new THREE.BufferGeometry();
+geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+geo.setAttribute('color',new THREE.BufferAttribute(colors,3));
+geo.setAttribute('psize',new THREE.BufferAttribute(sizeArr,1));
+const burnArr=new Float32Array(N);
+geo.setAttribute('aBurn',new THREE.BufferAttribute(burnArr,1));
+
+function sprite(){const s=64,cv=document.createElement('canvas');cv.width=cv.height=s;
+  const g=cv.getContext('2d'),gr=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.3,'rgba(255,255,255,.7)');
+  gr.addColorStop(.6,'rgba(255,255,255,.2)');gr.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gr;g.fillRect(0,0,s,s);return new THREE.CanvasTexture(cv);}
+
+const mat=new THREE.ShaderMaterial({
+  uniforms:{ uTex:{value:sprite()}, uScale:{value:innerHeight/2},
+             uMouse:{value:new THREE.Vector2(999,999)}, uR:{value:0.42}, uTime:{value:0} },
+  vertexColors:true, transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+  vertexShader:`
+    attribute float psize; attribute float aBurn; varying vec3 vC; varying float vB;
+    uniform float uScale; uniform float uTime;
+    void main(){ vC=color; vB=aBurn;
+      vec3 p=position;
+      float fl=sin(uTime*3.0+position.x*40.0)*0.5+0.5;
+      p.y += vB*vB*0.16*fl + vB*0.03;
+      p.x += vB*0.03*sin(uTime*4.0+position.y*55.0);
+      vec4 mv=modelViewMatrix*vec4(p,1.0);
+      gl_Position=projectionMatrix*mv;
+      gl_PointSize=psize*0.012*uScale*(1.0+vB*0.5)*(1.0-smoothstep(0.6,1.0,vB)*0.6); }`,
+  fragmentShader:`
+    uniform sampler2D uTex; varying vec3 vC; varying float vB; uniform float uTime;
+    void main(){ float a=texture2D(uTex,gl_PointCoord).a;
+      float flick=0.8+0.2*sin(uTime*5.0+gl_FragCoord.x*0.05+gl_FragCoord.y*0.04);
+      float b=vB;
+      vec3 c1=vec3(0.38,0.04,0.18);
+      vec3 c2=vec3(0.78,0.12,0.40);
+      vec3 c3=vec3(0.90,0.28,0.66);
+      vec3 fire=mix(c1, c2, smoothstep(0.12,0.55,b));
+      fire=mix(fire, c3, smoothstep(0.6,1.0,b));
+      fire*=flick;
+      vec3 col=mix(vC, fire, smoothstep(0.04,0.5,b));
+      float alpha=a*(1.0 - smoothstep(0.94,1.0,b)*0.25);
+      gl_FragColor=vec4(col, alpha); }`
+});
+const pts=new THREE.Points(geo,mat);
+scene.add(pts);
+
+const SN=70; const spa=new Float32Array(SN*3), spSeed=new Float32Array(SN);
+for(let i=0;i<SN;i++){ spa[i*3]=rnd(-aspect,aspect); spa[i*3+1]=rnd(-1,1); spa[i*3+2]=0; spSeed[i]=rnd(0,99); }
+const sgeo=new THREE.BufferGeometry(); sgeo.setAttribute('position',new THREE.BufferAttribute(spa,3));
+const smat=new THREE.PointsMaterial({size:innerHeight*0.006,map:sprite(),color:0xffe1b0,
+  transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:false});
+const spores=new THREE.Points(sgeo,smat); scene.add(spores);
+
+let mtx=999, mty=999, mx=999, my=999;
+addEventListener('pointermove', e=>{ mtx=(e.clientX/innerWidth*2-1)*aspect; mty=-(e.clientY/innerHeight*2-1); });
+addEventListener('pointerleave', ()=>{ mtx=999; mty=999; });
+const R=0.42, R2=R*R;
+
+const pos=geo.attributes.position.array;
+let t0=performance.now();
+function frame(now){
+  const t=(now-t0)*0.001;
+  if(mtx<900){ mx+=(mtx-mx)*0.22; my+=(mty-my)*0.22; } else { mx=999; my=999; }
+  mat.uniforms.uMouse.value.set(mx,my);
+  mat.uniforms.uTime.value=t;
+  for(let i=0;i<N;i++){
+    const w=Math.sin(t*0.8+baseX[i]*3.0+seed[i])*0.6+Math.sin(t*1.5+baseX[i]*6.0+seed[i])*0.3;
+    const x=baseX[i]+sway[i]*w, y=baseY[i];
+    pos[i*3]=x; pos[i*3+1]=y;
+    let f=0;
+    if(mx<900){ const dx=x-mx, dy=y-my, d2=dx*dx+dy*dy; if(d2<R2){ f=1-Math.sqrt(d2)/R; } }
+    let bv=burnArr[i]+f*0.05; bv*=0.992; burnArr[i]= bv>1?1:bv;
+  }
+  geo.attributes.position.needsUpdate=true;
+  geo.attributes.aBurn.needsUpdate=true;
+  for(let i=0;i<SN;i++){ spa[i*3+1]+=0.0009; if(spa[i*3+1]>1.05)spa[i*3+1]=-1.05;
+    spa[i*3]+=Math.sin(t*0.5+spSeed[i])*0.0004; }
+  sgeo.attributes.position.needsUpdate=true;
+  renderer.render(scene,cam);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+addEventListener('resize',()=>{ aspect=innerWidth/innerHeight;
+  cam.left=-aspect;cam.right=aspect;cam.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); mat.uniforms.uScale.value=innerHeight/2;
+  smat.size=innerHeight*0.006; });
+renderer.setSize(innerWidth,innerHeight);
+</script>
 </body>
 </html>
 
